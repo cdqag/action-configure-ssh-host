@@ -1,48 +1,107 @@
-# SSH Action
-A github action to setup ssh key and config in the current environment.
+# Configure SSH Host
 
-# Usage
-```
-name: ssh command
-on: push
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - id: ssh
-        uses: invi5H/ssh-action@v1
-        with:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-      - run: ssh ${{ steps.ssh.outputs.SERVER }} pwd
+A GitHub Action to create a new ssh/config entry for given host
+
+## Usage
+
+```yaml
+- uses: cdqag/action-configure-ssh-host@v1
+  with:
+    name: my-server
+    host: example.com
+    port: 22
+    user: deploy
+    private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 ```
 
-For multiple servers, run the above action multiple times, with a unique lowercase name each time
+## Inputs
+
+* `name` **Required**
+
+    A unique name for the server config entry.
+
+* `host` **Required**
+
+    The host address.
+
+* `port` _Default: '22'_
+
+    SSH port.
+
+* `user` **Required**
+
+    An user.
+
+* `private-key` **Required**
+
+    Private SSH key for the user.
+
+## Outputs
+
+* `server-name`
+
+    The name for the server in the config (sanitized version of the input name).
+
+## Examples
+
+### Basic SSH configuration
+
+This example will:
+
+* create an SSH config entry named `production-server`
+* configure connection to `prod.example.com` on port 22
+* use the `deploy` user for authentication
+* use the private key from secrets
+
+```yaml
+- uses: cdqag/action-configure-ssh-host@v1
+  with:
+    name: production-server
+    host: prod.example.com
+    user: deploy
+    private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 ```
-name: ssh command
-on: push
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - id: ssh-foo
-        uses: invi5H/ssh-action@v1
-        with:
-          NAME: foo
-          SSH_HOST: ${{ secrets.FOO_HOST }}
-          SSH_PORT: ${{ secrets.FOO_PORT }}
-          SSH_USER: ${{ secrets.FOO_USER }}
-          SSH_KEY: ${{ secrets.FOO_KEY }}
-      - id: ssh-bar
-        uses: invi5H/ssh-action@v1
-        with:
-          NAME: bar
-          SSH_HOST: ${{ secrets.BAR_HOST }}
-          SSH_PORT: ${{ secrets.BAR_PORT }}
-          SSH_USER: ${{ secrets.BAR_USER }}
-          SSH_KEY: ${{ secrets.BAR_KEY }}
-      - run: ssh ${{ steps.ssh-foo.outputs.SERVER }} pwd
-      - run: ssh ${{ steps.ssh-bar.outputs.SERVER }} pwd
+
+### SSH configuration with custom port
+
+This example will:
+
+* create an SSH config entry named `staging-server`
+* configure connection to `staging.example.com` on port 2222
+* use the `ubuntu` user for authentication
+* use the private key from secrets
+
+```yaml
+- uses: cdqag/action-configure-ssh-host@v1
+  with:
+    name: staging-server
+    host: staging.example.com
+    port: 2222
+    user: ubuntu
+    private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 ```
+
+## How it works
+
+This action:
+
+1. **Sanitizes the server name** - converts the provided name to a safe format for SSH config
+2. **Creates SSH directory** - ensures `~/.ssh` exists with proper permissions (700)
+3. **Checks for duplicates** - verifies the host entry doesn't already exist in SSH config
+4. **Creates private key file** - saves the private key to `~/.ssh/{server-name}.key` with secure permissions (600)
+5. **Scans host keys** - adds the server's public keys to `~/.ssh/known_hosts`
+6. **Creates SSH config entry** - adds a new Host entry to `~/.ssh/config`
+
+After running this action, you can connect to your server using:
+
+```bash
+ssh {server-name}
+```
+
+## Resources
+
+*  This action is based on [invi5H/ssh-action](https://github.com/invi5H/ssh-action), but it seems abandoned and not maintained anymore.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

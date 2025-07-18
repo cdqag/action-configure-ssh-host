@@ -1,60 +1,106 @@
-name: "SSH Action"
-description: "This action sets up the ssh config in the current environment"
-author: "mridul_aggarwal@yahoo.co.in"
+name: Configure SSH Host
+description: A GitHub Action to create a new ssh/config entry for given host
+
+author: CDQ AG
+branding:
+  icon: lock
+  color: red
 
 inputs:
-  NAME:
-    description: "A unique name for the server"
-    required: false
-    default: server
-  SSH_USER:
-    description: "The SSH username"
+  name:
+    description: A unique name for the server config entry
     required: true
-  SSH_HOST:
-    description: "The hostname or the IP address"
+
+  host:
+    description: The host address
     required: true
-  SSH_PORT:
-    description: "The SSH port"
+
+  port:
+    description: "SSH port (default: to 22)"
     required: false
     default: "22"
-  SSH_KEY:
-    description: "The full string SSH key"
+
+  user:
+    description: An user
+    required: true
+  
+  private-key:
+    description: Private SSH key for the user
     required: true
 
 outputs:
-  SERVER:
-    description: "The name for the server in the config"
-    value: ${{ steps.setup.outputs.name }}
+  server-name:
+    description: The name for the server in the config
+    value: ${{ steps.prepare.outputs.server-name }}
 
 runs:
-  using: "composite"
+  using: composite
   steps:
-    - id: setup
-      name: Set server name
+    - id: prepare
+      name: Prepare sanitized server name
+      shell: bash
+      env:
+        INPUT_NAME: ${{ inputs.name }}
       run: |
-        NAME=$(echo "${{ inputs.NAME }}" | iconv -t ascii//TRANSLIT | sed -E 's/[^a-zA-Z0-9]+/-/g' | sed -E 's/^-+|-+$//g' | tr A-Z a-z)
-        echo "name=$NAME" >> $GITHUB_OUTPUT
+        SERVER_NAME=$(echo "$INPUT_NAME" | iconv -t ascii//TRANSLIT | sed -E 's/[^a-zA-Z0-9]+/-/g' | sed -E 's/^-+|-+$//g' | tr A-Z a-z)
+        echo "server-name=$SERVER_NAME" >> $GITHUB_OUTPUT
+
+    - name: Ensure SSH directory exists
       shell: bash
-    - name: Create SSH key
       run: |
-        mkdir -p ~/.ssh/
-        echo "${{ inputs.SSH_KEY }}" > ~/.ssh/${{ steps.setup.outputs.name }}.key
-        sudo chmod 600 ~/.ssh/${{ steps.setup.outputs.name }}.key
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+    - name: Ensure that entry does not already exist
       shell: bash
-    - name: Scan the public ssh host keys
-      run: ssh-keyscan -H ${{ inputs.SSH_HOST }} >> ~/.ssh/known_hosts
+      env:
+        SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
+      run: |
+        if [ ! -f ~/.ssh/config ]; then
+          echo ".ssh/config file does not exist yet - skipping check"
+          exit 0
+        fi
+
+        if grep -q "Host $SERVER_NAME" ~/.ssh/config; then
+          echo "Host $SERVER_NAME already exists in ~/.ssh/config"
+          exit 1
+        fi
+
+    - id: private-key
+      name: Create the private key file
       shell: bash
-    - name: Create SSH config
+      env:
+        PRIVATE_KEY: ${{ inputs.private-key }}
+        SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
+      run: |
+        PRIVATE_KEY_PATH="~/.ssh/$SERVER_NAME.key"
+
+        echo "$PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+        sudo chmod 600 "$PRIVATE_KEY_PATH"
+
+        echo "path=$PRIVATE_KEY_PATH" >> $GITHUB_OUTPUT
+
+    - name: Scan the public SSH host keys
+      shell: bash
+      env:
+        SSH_HOST: ${{ inputs.host }}
+        SSH_PORT: ${{ inputs.port }}
+      run: |
+        ssh-keyscan -H "$SSH_HOST" -p "$SSH_PORT" >> ~/.ssh/known_hosts
+
+    - name: Create entry in ssh/config
+      shell: bash
+      env:
+        SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
+        SSH_HOST: ${{ inputs.host }}
+        SSH_PORT: ${{ inputs.port }}
+        SSH_USER: ${{ inputs.user }}
+        PRIVATE_KEY_PATH: ${{ steps.private-key.outputs.path }}
       run: |
         cat >>~/.ssh/config <<END
-        Host ${{ steps.setup.outputs.name }}
-          HostName ${{ inputs.SSH_HOST }}
-          Port ${{ inputs.SSH_PORT }}
-          User ${{ inputs.SSH_USER }}
-          IdentityFile ~/.ssh/${{ steps.setup.outputs.name }}.key
+        Host $SERVER_NAME
+          HostName $SSH_HOST
+          Port $SSH_PORT
+          User $SSH_USER
+          IdentityFile $PRIVATE_KEY_PATH
         END
-      shell: bash
-
-branding:
-  icon: "terminal"
-  color: "gray-dark"
