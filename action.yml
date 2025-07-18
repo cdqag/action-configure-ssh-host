@@ -48,20 +48,20 @@ runs:
     - name: Ensure SSH directory exists
       shell: bash
       run: |
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
 
     - name: Ensure that entry does not already exist
       shell: bash
       env:
         SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
       run: |
-        if [ ! -f ~/.ssh/config ]; then
+        if [ ! -f "$HOME/.ssh/config" ]; then
           echo ".ssh/config file does not exist yet - skipping check"
           exit 0
         fi
 
-        if grep -q "Host $SERVER_NAME" ~/.ssh/config; then
+        if grep -q "Host $SERVER_NAME" "$HOME/.ssh/config"; then
           echo "Host $SERVER_NAME already exists in ~/.ssh/config"
           exit 1
         fi
@@ -73,10 +73,10 @@ runs:
         PRIVATE_KEY: ${{ inputs.private-key }}
         SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
       run: |
-        PRIVATE_KEY_PATH="~/.ssh/$SERVER_NAME.key"
+        PRIVATE_KEY_PATH="$HOME/.ssh/$SERVER_NAME.key"
 
         echo "$PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-        sudo chmod 600 "$PRIVATE_KEY_PATH"
+        chmod 600 "$PRIVATE_KEY_PATH"
 
         echo "path=$PRIVATE_KEY_PATH" >> $GITHUB_OUTPUT
 
@@ -86,7 +86,7 @@ runs:
         SSH_HOST: ${{ inputs.host }}
         SSH_PORT: ${{ inputs.port }}
       run: |
-        ssh-keyscan -H "$SSH_HOST" -p "$SSH_PORT" >> ~/.ssh/known_hosts
+        ssh-keyscan -H "$SSH_HOST" -p "$SSH_PORT" >> "$HOME/.ssh/known_hosts"
 
     - name: Create entry in ssh/config
       shell: bash
@@ -97,7 +97,7 @@ runs:
         SSH_USER: ${{ inputs.user }}
         PRIVATE_KEY_PATH: ${{ steps.private-key.outputs.path }}
       run: |
-        cat >>~/.ssh/config <<END
+        cat >> "$HOME/.ssh/config" <<END
         Host $SERVER_NAME
           HostName $SSH_HOST
           Port $SSH_PORT
