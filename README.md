@@ -36,6 +36,10 @@ A GitHub Action to create a new ssh/config entry for given host
 
     Private SSH key for the user.
 
+* `fail-if-entry-already-exists` _Default: 'true'_
+
+    If set to `true`, the action will fail if the SSH config entry already exists. If set to `false`, it will skip the rest of the steps.
+
 ## Outputs
 
 * `server-name`

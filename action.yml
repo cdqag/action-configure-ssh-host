@@ -28,6 +28,11 @@ inputs:
     description: Private SSH key for the user
     required: true
 
+  fail-if-entry-already-exists:
+    description: Fail if the SSH config entry already exists
+    required: false
+    default: "true"
+
 outputs:
   server-name:
     description: The name for the server in the config
@@ -51,10 +56,12 @@ runs:
         mkdir -p "$HOME/.ssh"
         chmod 700 "$HOME/.ssh"
 
-    - name: Ensure that entry does not already exist
+    - name: Check if the entry does not already exist
+      id: check-entry
       shell: bash
       env:
         SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
+        SHOULD_FAIL: ${{ inputs.fail-if-entry-already-exists }}
       run: |
         if [ ! -f "$HOME/.ssh/config" ]; then
           echo ".ssh/config file does not exist yet - skipping check"
@@ -62,11 +69,20 @@ runs:
         fi
 
         if grep -q "Host $SERVER_NAME" "$HOME/.ssh/config"; then
-          echo "Host $SERVER_NAME already exists in ~/.ssh/config"
-          exit 1
+          if [ "$SHOULD_FAIL" = "true" ]; then
+            echo "Host $SERVER_NAME already exists in ~/.ssh/config"
+            exit 1
+          fi
+          
+          echo "Host $SERVER_NAME already exists in ~/.ssh/config - skipping creation"
+          echo "skip-creation=true" >> $GITHUB_OUTPUT
+        else
+          echo "Host $SERVER_NAME does not exist in ~/.ssh/config - proceeding with creation"
+          echo "skip-creation=false" >> $GITHUB_OUTPUT
         fi
 
     - id: private-key
+      if: steps.check-entry.outputs.skip-creation != 'true'
       name: Create the private key file
       shell: bash
       env:
@@ -80,7 +96,8 @@ runs:
 
         echo "path=$PRIVATE_KEY_PATH" >> $GITHUB_OUTPUT
 
-    - name: Scan the public SSH host keys
+    - if: steps.check-entry.outputs.skip-creation != 'true'
+      name: Scan the public SSH host keys
       shell: bash
       env:
         SSH_HOST: ${{ inputs.host }}
@@ -88,7 +105,8 @@ runs:
       run: |
         ssh-keyscan -H "$SSH_HOST" -p "$SSH_PORT" >> "$HOME/.ssh/known_hosts"
 
-    - name: Create entry in ssh/config
+    - if: steps.check-entry.outputs.skip-creation != 'true'
+      name: Create entry in ssh/config
       shell: bash
       env:
         SERVER_NAME: ${{ steps.prepare.outputs.server-name }}
